@@ -158,30 +158,7 @@ typedef struct {
 	const char *name;
 	const char *comment;
 } itunes_tag;
-static const itunes_tag itags[] = {
-	{GF_ISOM_ITUNE_ALBUM_ARTIST, "album_artist", "usage: album_artist=album artist"},
-	{GF_ISOM_ITUNE_ALBUM, "album", "usage: album=name" },
-	{GF_ISOM_ITUNE_TRACKNUMBER, "tracknum", "usage: track=x/N"},
-	{GF_ISOM_ITUNE_TRACK, "track", "usage: track=name"},
-	{GF_ISOM_ITUNE_ARTIST, "artist", "usage: artist=name"},
-	{GF_ISOM_ITUNE_COMMENT, "comment", "usage: comment=any comment"},
-	{GF_ISOM_ITUNE_COMPILATION, "compilation", "usage: compilation=yes,no"},
-	{GF_ISOM_ITUNE_COMPOSER, "composer", "usage: composer=name"},
-	{GF_ISOM_ITUNE_CREATED, "created", "usage: created=time"},
-	{GF_ISOM_ITUNE_DISK, "disk", "usage: disk=x/N"},
-	{GF_ISOM_ITUNE_TOOL, "tool", "usage: tool=name"},
-	{GF_ISOM_ITUNE_GENRE, "genre", "usage: genre=name"},
-	{GF_ISOM_ITUNE_NAME, "name", "usage: name=name"},
-	{GF_ISOM_ITUNE_TEMPO, "tempo", "usage: tempo=integer"},
-	{GF_ISOM_ITUNE_WRITER, "writer", "usage: writer=name"},
-	{GF_ISOM_ITUNE_GROUP, "group", "usage: group=name"},
-	{GF_ISOM_ITUNE_COVER_ART, "cover", "usage: cover=file.jpg,file.png"},
-	{GF_ISOM_ITUNE_ENCODER, "encoder", "usage: encoder=name"},
-	{GF_ISOM_ITUNE_GAPLESS, "gapless", "usage: gapless=yes,no"},
-	{GF_ISOM_ITUNE_ALL, "all", "usage: all=NULL"},
-};
 
-u32 nb_itunes_tags = sizeof(itags) / sizeof(itunes_tag);
 
 
 #ifdef GPAC_MEMORY_TRACKING
@@ -534,12 +511,6 @@ GF_FileType get_file_type_by_ext(char *inName)
 }
 
 #ifndef GPAC_DISABLE_ISOM_WRITE
-static Bool can_convert_to_isma(GF_ISOFile *file)
-{
-	u32 spec = gf_isom_guess_specification(file);
-	if (spec==GF_4CC('I','S','M','A')) return GF_TRUE;
-	return GF_FALSE;
-}
 #endif
 
 static void progress_quiet(const void *cbck, const char *title, u64 done, u64 total) { }
@@ -580,152 +551,6 @@ typedef struct
 } MetaAction;
 
 #ifndef GPAC_DISABLE_ISOM_WRITE
-static Bool parse_meta_args(MetaAction *meta, MetaActionType act_type, char *opts)
-{
-	Bool ret = 0;
-	char szSlot[1024], *next;
-
-	memset(meta, 0, sizeof(MetaAction));
-	meta->act_type = act_type;
-	meta->mime_type[0] = 0;
-	meta->enc_type[0] = 0;
-	meta->szName[0] = 0;
-	meta->szPath[0] = 0;
-	meta->trackID = 0;
-	meta->root_meta = 1;
-
-	if (!opts) return 0;
-	while (1) {
-		if (!opts || !opts[0]) return ret;
-		if (opts[0]==':') opts += 1;
-		strcpy(szSlot, opts);
-		next = strchr(szSlot, ':');
-		/*use ':' as separator, but beware DOS paths...*/
-		if (next && next[1]=='\\') next = strchr(szSlot+2, ':');
-		if (next) next[0] = 0;
-
-		if (!strnicmp(szSlot, "tk=", 3)) {
-			sscanf(szSlot, "tk=%u", &meta->trackID);
-			meta->root_meta = 0;
-			ret = 1;
-		}
-		else if (!strnicmp(szSlot, "id=", 3)) {
-			meta->item_id = atoi(szSlot+3);
-			ret = 1;
-		}
-		else if (!strnicmp(szSlot, "type=", 5)) {
-			meta->item_type = GF_4CC(szSlot[5], szSlot[6], szSlot[7], szSlot[8]);
-			ret = 1;
-		}
-		else if (!strnicmp(szSlot, "ref=", 4)) {
-			char type[10];
-			sscanf(szSlot, "ref=%u,%s", &meta->ref_item_id, type);
-			meta->ref_type = GF_4CC(type[0], type[1], type[2], type[3]);
-			ret = 1;
-		}		
-		else if (!strnicmp(szSlot, "name=", 5)) {
-			strcpy(meta->szName, szSlot+5);
-			ret = 1;
-		}
-		else if (!strnicmp(szSlot, "path=", 5)) {
-			strcpy(meta->szPath, szSlot+5);
-			ret = 1;
-		}
-		else if (!strnicmp(szSlot, "mime=", 5)) {
-			meta->item_type = GF_4CC('m','i','m','e');
-			strcpy(meta->mime_type, szSlot+5);
-			ret = 1;
-		}
-		else if (!strnicmp(szSlot, "encoding=", 9)) {
-			strcpy(meta->enc_type, szSlot+9);
-			ret = 1;
-		}
-		else if (!strnicmp(szSlot, "image-size=", 11)) {
-			if (!meta->image_props) {
-				GF_SAFEALLOC(meta->image_props, GF_ImageItemProperties);
-			}
-			sscanf(szSlot+11, "%dx%d", &meta->image_props->width, &meta->image_props->height);
-			ret = 1;
-		}
-		else if (!strnicmp(szSlot, "image-pasp=", 11)) {
-			if (!meta->image_props) {
-				GF_SAFEALLOC(meta->image_props, GF_ImageItemProperties);
-			}
-			sscanf(szSlot+11, "%dx%d", &meta->image_props->hSpacing, &meta->image_props->vSpacing);
-			ret = 1;
-		}
-		else if (!strnicmp(szSlot, "image-rloc=", 11)) {
-			if (!meta->image_props) {
-				GF_SAFEALLOC(meta->image_props, GF_ImageItemProperties);
-			}
-			sscanf(szSlot+11, "%dx%d", &meta->image_props->hOffset, &meta->image_props->vOffset);
-			ret = 1;
-		}
-		else if (!strnicmp(szSlot, "image-irot=", 11)) {
-			if (!meta->image_props) {
-				GF_SAFEALLOC(meta->image_props, GF_ImageItemProperties);
-			}
-			meta->image_props->angle = atoi(szSlot+11);
-			ret = 1;
-		}
-		else if (!strnicmp(szSlot, "image-hidden", 12)) {
-			if (!meta->image_props) {
-				GF_SAFEALLOC(meta->image_props, GF_ImageItemProperties);
-			}
-			meta->image_props->hidden = GF_TRUE;
-			ret = 1;
-		}
-		else if (!strnicmp(szSlot, "tilemode=", 9)) {
-			if (!meta->image_props) {
-				GF_SAFEALLOC(meta->image_props, GF_ImageItemProperties);
-			}
-			if (!strnicmp(szSlot + 9, "nobase", 6)) {
-				meta->image_props->tile_mode = TILE_ITEM_ALL_NO_BASE;
-			} else if (!strnicmp(szSlot + 9, "base", 4)) {
-				meta->image_props->tile_mode = TILE_ITEM_ALL_BASE;
-			} else if (!strnicmp(szSlot + 9, "grid", 4)) {
-				meta->image_props->tile_mode = TILE_ITEM_ALL_GRID;
-			} else {
-				meta->image_props->tile_mode = TILE_ITEM_SINGLE;
-				sscanf(szSlot + 9, "%d", &meta->image_props->single_tile_number);
-			}			
-		}
-		else if (!strnicmp(szSlot, "dref", 4)) {
-			meta->use_dref = 1;
-			ret = 1;
-		}
-		else if (!stricmp(szSlot, "binary")) {
-			if (meta->act_type==META_ACTION_SET_XML) meta->act_type=META_ACTION_SET_BINARY_XML;
-			ret = 1;
-		}
-		else if (!strchr(szSlot, '=')) {
-			switch (meta->act_type) {
-			case META_ACTION_SET_TYPE:
-				if (!stricmp(szSlot, "null") || !stricmp(szSlot, "0")) meta->meta_4cc = 0;
-				else meta->meta_4cc = GF_4CC(szSlot[0], szSlot[1], szSlot[2], szSlot[3]);
-				ret = 1;
-				break;
-			case META_ACTION_ADD_ITEM:
-			case META_ACTION_ADD_IMAGE_ITEM:
-			case META_ACTION_SET_XML:
-			case META_ACTION_DUMP_XML:
-				strcpy(meta->szPath, szSlot);
-				ret = 1;
-				break;
-			case META_ACTION_REM_ITEM:
-			case META_ACTION_SET_PRIMARY_ITEM:
-			case META_ACTION_DUMP_ITEM:
-				meta->item_id = atoi(szSlot);
-				ret = 1;
-				break;
-			default:
-				break;
-			}
-		}
-		opts += strlen(szSlot);
-	}
-	return ret;
-}
 #endif
 
 
@@ -747,77 +572,7 @@ typedef struct
 	u32 switchGroupID;
 } TSELAction;
 
-static Bool parse_tsel_args(TSELAction **__tsel_list, char *opts, u32 *nb_tsel_act, TSELActionType act)
-{
-	u32 refTrackID = 0;
-	Bool has_switch_id;
-	u32 switch_id = 0;
-	u32 criteria[30];
-	u32 nb_criteria = 0;
-	TSELAction *tsel_act;
-	char szSlot[1024], *next;
-	TSELAction *tsel_list;
 
-	has_switch_id = 0;
-
-
-	if (!opts) return 0;
-	while (1) {
-		if (!opts || !opts[0]) return 1;
-		if (opts[0]==':') opts += 1;
-		strcpy(szSlot, opts);
-		next = strchr(szSlot, ':');
-		/*use ':' as separator, but beware DOS paths...*/
-		if (next && next[1]=='\\') next = strchr(szSlot+2, ':');
-		if (next) next[0] = 0;
-
-
-		if (!strnicmp(szSlot, "refTrack=", 9)) refTrackID = atoi(szSlot+9);
-		else if (!strnicmp(szSlot, "switchID=", 9)) {
-			if (atoi(szSlot+9)<0) {
-				switch_id = 0;
-				has_switch_id = 0;
-			} else {
-				switch_id = atoi(szSlot+9);
-				has_switch_id = 1;
-			}
-		}
-		else if (!strnicmp(szSlot, "switchID", 8)) {
-			switch_id = 0;
-			has_switch_id = 1;
-		}
-		else if (!strnicmp(szSlot, "criteria=", 9)) {
-			u32 j=9;
-			nb_criteria = 0;
-			while (j+3<strlen(szSlot)) {
-				criteria[nb_criteria] = GF_4CC(szSlot[j], szSlot[j+1], szSlot[j+2], szSlot[j+3]);
-				j+=5;
-				nb_criteria++;
-			}
-		}
-		else if (!strnicmp(szSlot, "trackID=", 8) || !strchr(szSlot, '=') ) {
-			*__tsel_list = gf_realloc(*__tsel_list, sizeof(TSELAction) * (*nb_tsel_act + 1));
-			tsel_list = *__tsel_list;
-
-			tsel_act = &tsel_list[*nb_tsel_act];
-			memset(tsel_act, 0, sizeof(TSELAction));
-			tsel_act->act_type = act;
-			tsel_act->trackID = strchr(szSlot, '=') ? atoi(szSlot+8) : atoi(szSlot);
-			tsel_act->refTrackID = refTrackID;
-			tsel_act->switchGroupID = switch_id;
-			tsel_act->is_switchGroup = has_switch_id;
-			tsel_act->nb_criteria = nb_criteria;
-			memcpy(tsel_act->criteria, criteria, sizeof(u32)*nb_criteria);
-
-			if (!refTrackID)
-				refTrackID = tsel_act->trackID;
-
-			(*nb_tsel_act) ++;
-		}
-		opts += strlen(szSlot);
-	}
-	return 1;
-}
 
 
 #define CHECK_NEXT_ARG	if (i+1==(u32)argc) { fprintf(stderr, "Missing arg - please check usage\n"); return mp4box_cleanup(1); }
@@ -1037,103 +792,14 @@ static GF_Err parse_track_action_params(char *string, TrackAction *action)
 	return GF_OK;
 }
 
-static u32 create_new_track_action(char *string, TrackAction **actions, u32 *nb_track_act, u32 dump_type)
-{
-	*actions = (TrackAction *)gf_realloc(*actions, sizeof(TrackAction) * (*nb_track_act+1));
-	memset(&(*actions)[*nb_track_act], 0, sizeof(TrackAction) );
-	(*actions)[*nb_track_act].act_type = TRAC_ACTION_RAW_EXTRACT;
-	(*actions)[*nb_track_act].dump_type = dump_type;
-	parse_track_action_params(string, &(*actions)[*nb_track_act]);
-	(*nb_track_act)++;
-	return dump_type;
-}
 
 #ifndef GPAC_DISABLE_CORE_TOOLS
-static GF_Err nhml_bs_to_bin(char *inName, char *outName, u32 dump_std)
-{
-	GF_Err e;
-	GF_XMLNode *root;
-	char *data = NULL;
-	u32 data_size;
-
-	GF_DOMParser *dom = gf_xml_dom_new();
-	e = gf_xml_dom_parse(dom, inName, NULL, NULL);
-	if (e) {
-		gf_xml_dom_del(dom);
-		fprintf(stderr, "Failed to parse XML file: %s\n", gf_error_to_string(e));
-		return e;
-	}
-	root = gf_xml_dom_get_root_idx(dom, 0);
-	if (!root) {
-		gf_xml_dom_del(dom);
-		return GF_OK;
-	}
-
-	e = gf_xml_parse_bit_sequence(root, &data, &data_size);
-	gf_xml_dom_del(dom);
-
-	if (e) {
-		fprintf(stderr, "Failed to parse binary sequence: %s\n", gf_error_to_string(e));
-		return e;
-	}
-
-	if (dump_std) {
-		fwrite(data, 1, data_size, stdout);
-	} else {
-		FILE *t;
-		char szFile[GF_MAX_PATH];
-		if (outName) {
-			strcpy(szFile, outName);
-		} else {
-			strcpy(szFile, inName);
-			strcat(szFile, ".bin");
-		}
-		t = gf_fopen(szFile, "wb");
-		if (!t) {
-			fprintf(stderr, "Failed to open file %s\n", szFile);
-			e = GF_IO_ERR;
-		} else {
-			if (fwrite(data, 1, data_size, t) != data_size) {
-				fprintf(stderr, "Failed to write output to file %s\n", szFile);
-				e = GF_IO_ERR;
-			}
-			gf_fclose(t);
-		}
-	}
-	gf_free(data);
-	return e;
-}
 #endif /*GPAC_DISABLE_CORE_TOOLS*/
 
-static GF_Err hash_file(char *name, u32 dump_std)
-{
-	u32 i;
-	u8 hash[20];
-	GF_Err e = gf_media_get_file_hash(name, hash);
-	if (e) return e;
-	if (dump_std==2) {
-		fwrite(hash, 1, 20, stdout);
-	} else if (dump_std==1) {
-		for (i=0; i<20; i++) fprintf(stdout, "%02X", hash[i]);
-	}
-	fprintf(stderr, "File hash (SHA-1): ");
-	for (i=0; i<20; i++) fprintf(stderr, "%02X", hash[i]);
-	fprintf(stderr, "\n");
-
-	return GF_OK;
-}
 
 Bool log_sys_clock = GF_FALSE;
 Bool log_utc_time = GF_FALSE;
 
-static void on_gpac_log(void *cbk, GF_LOG_Level ll, GF_LOG_Tool lm, const char *fmt, va_list list)
-{
-	FILE *logs = cbk;
-
-
-	vfprintf(logs, fmt, list);
-	fflush(logs);
-}
 
 char outfile[5000];
 GF_Err e;
@@ -1226,8 +892,6 @@ const char *grab_m2ts = NULL;
 const char *grab_ifce = NULL;
 #endif
 FILE *logfile = NULL;
-static u32 dash_run_for;
-static u32 dash_cumulated_time,dash_prev_time,dash_now_time;
 
 u32 mp4box_cleanup(u32 ret_code) {
 	gf_sys_close();
@@ -1573,8 +1237,6 @@ int mp4boxMain(int argc, char **argv)
 
 #ifndef GPAC_DISABLE_MEDIA_EXPORT
 	if (!open_edit && !gf_isom_probe_file(inName) && track_dump_type) {
-		GF_MediaExporter mdump;
-		char szFile[1024];
 		goto exit;
 	}
 
